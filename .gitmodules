@@ -1,0 +1,3 @@
+[submodule "lib/soil_sensor_common"]
+	path = lib/soil_sensor_common
+	url = https://github.com/jgallagher59701/soil_sensor_common.git
