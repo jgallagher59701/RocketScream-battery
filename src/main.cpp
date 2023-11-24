@@ -192,6 +192,8 @@ void setup() {
     pinMode(25, INPUT_PULLUP);
     pinMode(26, INPUT_PULLUP);
 
+    pinMode(A5, INPUT);
+
     pinMode(STATUS_LED, OUTPUT);
     digitalWrite(STATUS_LED, HIGH);
 

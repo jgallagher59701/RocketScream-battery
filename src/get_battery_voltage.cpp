@@ -41,7 +41,7 @@ int get_battery_voltage() {
     float voltage = 0.0;
 
 #if USE_AREF_2V23
-    // Vref = 2.23, the voltage divider cuts the voltage in half. ADC /ADC_MAX
+    // Vref = 2.23, the voltage divider cuts the voltage in half. ADC / ADC_MAX
     // * 2.23 is the actual voltage the ADC measures. Double that to account
     // for the voltage divider. The divider is there to keep the voltage measured
     // below 3.3 (Vbat can be 3.7V).
@@ -49,8 +49,6 @@ int get_battery_voltage() {
 #elif USE_AREF_1V0
     voltage = 2.0 * (avg_adc_reading / ADC_MAX_VALUE);
 #else
-    // Using the 3V3 Vref fails because when Vbat falls below 3.3V, the value of
-    // Vref tracks it, so all values of Vbat < 3.3 show up as 3.3V.
     voltage = 6.6 * (avg_adc_reading / ADC_MAX_VALUE);
 #endif
 
