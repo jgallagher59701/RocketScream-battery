@@ -1,0 +1,337 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 HelveticaNeue;\f1\fswiss\fcharset0 Helvetica;\f2\fmodern\fcharset0 Courier;
+\f3\fmodern\fcharset0 Courier-Oblique;\f4\fnil\fcharset0 Menlo-Regular;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue0;\red69\green60\blue204;
+\red20\green160\blue194;\red9\green79\blue209;\red29\green184\blue14;\red183\green111\blue179;\red24\green24\blue24;
+\red70\green137\blue204;\red194\green126\blue101;\red193\green193\blue193;\red167\green197\blue152;\red140\green211\blue254;
+\red89\green138\blue67;\red212\green214\blue154;\red202\green202\blue202;\red66\green179\blue255;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0\cname textColor;\cssrgb\c0\c0\c0;\cssrgb\c34510\c33725\c83922;
+\cssrgb\c0\c68627\c80392;\cssrgb\c0\c40784\c85490;\cssrgb\c7059\c75294\c5490;\cssrgb\c77255\c52549\c75294;\cssrgb\c12157\c12157\c12157;
+\cssrgb\c33725\c61176\c83922;\cssrgb\c80784\c56863\c47059;\cssrgb\c80000\c80000\c80000;\cssrgb\c70980\c80784\c65882;\cssrgb\c61176\c86275\c99608;
+\cssrgb\c41569\c60000\c33333;\cssrgb\c86275\c86275\c66667;\cssrgb\c83137\c83137\c83137;\cssrgb\c30980\c75686\c100000;}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs28 \cf2 From: Lim Phang Moh <support@rocketscream.com>\
+Subject: Re: New Message (sent by contact form at Rocket Scream)\
+Date: November 23, 2023 at 08:52:56 MST\
+To: James Gallagher <jgallagher@opendap.org>\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f1\fs24 \cf2 \
+\pard\pardeftab720\sa280\partightenfactor0
+
+\f2\fs28 \cf3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec3 Hi James,\
+I think I found the problem. If you look at the core files of the SAMD21 in wiring_analog.c, you'll see:\
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 void analogReference(eAnalogReference mode)\
+\{\
+\'a0 syncADC();\
+\'a0 switch (mode)\
+\'a0 \{\
+\'a0\'a0\'a0 case AR_INTERNAL:\
+\'a0\'a0\'a0 case AR_INTERNAL2V23:\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;\'a0\'a0\'a0\'a0\'a0 // Gain Factor Selection\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC0_Val; // 1/1.48 VDDANA = 1/1.48* 3V3 = 2.2297\
+\'a0\'a0\'a0\'a0\'a0 break;\
+\
+\'a0\'a0\'a0 case AR_EXTERNAL:\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;\'a0\'a0\'a0\'a0\'a0 // Gain Factor Selection\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_AREFA_Val;\
+\'a0\'a0\'a0\'a0\'a0 break;\
+\
+\'a0\'a0\'a0 case AR_INTERNAL1V0:\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;\'a0\'a0\'a0\'a0\'a0 // Gain Factor Selection\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val;\'a0\'a0 // 1.0V voltage reference\
+\'a0\'a0\'a0\'a0\'a0 break;\
+\
+\'a0\'a0\'a0 case AR_INTERNAL1V65:\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;\'a0\'a0\'a0\'a0\'a0 // Gain Factor Selection\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC1_Val; // 1/2 VDDANA = 0.5* 3V3 = 1.65V\
+\'a0\'a0\'a0\'a0\'a0 break;\
+\
+\'a0\'a0\'a0 case AR_DEFAULT:\
+\'a0\'a0\'a0 default:\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC1_Val; // 1/2 VDDANA = 0.5* 3V3 = 1.65V\
+\'a0\'a0\'a0\'a0\'a0 break;\
+\'a0 \}\
+\}\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf3 \strokec3 \
+So, both the AR_INTERNAL1V65 & AR_INTERNAL2V23 are tied to the VDDANA which is your VCC. When 3.0V is the battery input and considering the drop across the LDO is minimal, our AR_INTERNAL1V65 & AR_INTERNAL2V23 are basically around 1.5V and 2.03 respectively. But I weren't able to get this work and it stuck at a ceiling value if VBAT is less than 3.5V. I think there are some code in the Arduino core that is ain't right.\uc0\u8232 \
+So, I look into the 1.0V internal reference instead. Instead of calling the analogReference() function directly, I instead wrote my own and did some modification to the gain:\
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 \'a0\'a0\'a0\'a0\'a0 while (ADC->STATUS.bit.SYNCBUSY == 1);\
+\'a0\'a0\'a0\'a0\'a0 ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;\'a0\'a0\'a0\'a0\'a0 // 0.5 gain Factor Selection\
+\'a0\'a0\'a0\'a0\'a0 ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val;\'a0\'a0 // 1.0V voltage reference\
+\'a0\'a0\'a0\'a0\'a0 while (ADC->STATUS.bit.SYNCBUSY == 1);\
+\pard\pardeftab720\partightenfactor0
+\cf3 \strokec3 I called the above in the 
+\f3\i setup()
+\f2\i0  section of the code. Using a half voltage divider resistor network, the computed battery voltage:\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf3 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 batteryVoltage = adcReading * ((2 * 2 ) / 1023.0); // The 1st multiplication by 2 is due to the 0.5 gain. The 2nd multiplication by 2 is due to the half voltage divider. Reference is 1.0V\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf3 \strokec3 \
+This works down to 2.2V VBAT. Below that it stops operating completely.\
+Hope that solve the problem.\
+Thank you.\uc0\u8232 \
+\pard\pardeftab720\partightenfactor0
+\cf3 Phang Moh, Lim\
+Rocket Scream Electronics\
+On 11/23/23 08:52, James Gallagher wrote:\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 Lim,\
+\
+I see this didn\'92t send back on the 15th.\
+\
+\
+\pard\pardeftab720\partightenfactor0
+\cf5 \strokec5 On Nov 15, 2023, at 16:59, Lim Phang Moh {\field{\*\fldinst{HYPERLINK "mailto:support@rocketscream.com"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <support@rocketscream.com>}} wrote:\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf5 Hi James,\
+I will test this out on the hardware this weekend.\
+But, I'm just curious how do you get the readings out of the board without the USB connected? When USB is connected, battery will be charged, so it goes up.\uc0\u8232 \
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 \
+I\'92m using a j-link debugging probe. The debugger that\'92s part of platformio works very well. I _was_ using lora to send the data to a matched receiver (a second RS mini ultra pro) but that was tedious to work with since I was swapping the two systems back and forth for various updates.\
+\
+The debugger is the better option.\
+\
+Adafruit and others sell a probe that works with the M0, M4, etc., for about $20.\
+\
+James\
+\pard\pardeftab720\partightenfactor0
+\cf5 \strokec5 \
+Phang Moh, Lim\
+Rocket Scream Electronics\
+On 11/13/23 03:13, James Gallagher wrote:\
+\pard\pardeftab720\partightenfactor0
+\cf7 \strokec7 Lim,\
+\
+One more observation: the 1M|1M voltage divider, when disconnected from pin A5 behaves as expected, reducing the voltage by 1/2 (3.6 \'97> 1.75, etc.) but when I connect the divider to pin A5, the measured voltage from the divider increases (e.g., 3.6v \'97> 2.1v). I can see that the Mini Ultra Pro is measuring 4.2v in this case, which is the correct value for 2.1v at pin A5.\
+\
+However, as the voltage drops below 3.3v, while the voltage at pin A5 drops, the ADC never returns a value lower than ~3600.\'a0\
+\
+So there seems to be two problems: the voltage divider does not behave as expected and as the battery goes below 3.3v, the reading hits a floor of 3600 and never goes lower.\
+\
+I must be missing something \'85\
+\
+Thanks,\
+James\
+\
+On Nov 12, 2023, at 11:01, James Gallagher {\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <jgallagher@opendap.org>}} wrote:\
+I should add that I\'92m powering the mini ultra pro using both a bench supply and a standalone battery, running various tests.\
+\
+James\
+\
+On Nov 12, 2023, at 10:55, James Gallagher {\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <jgallagher@opendap.org>}} wrote:\
+Lim,\
+\
+I take it that the LDO also provides the Vref values?\
+\
+Thanks for looking at this. The code, which I wrote to look into this issue based on a larger body of code, can be found here:\'a0{\field{\*\fldinst{HYPERLINK "https://github.com/jgallagher59701/RocketScream-battery"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 https://github.com/jgallagher59701/RocketScream-battery}}. But, looking through that might be tedious, even though it\'92s trimmed down to just the batter reading and LoRa parts. I\'92ll attach/include just the source that initializes the ADC and performs the voltage reads.\
+\
+I\'92m getting the values using a j-link debugging probe - the cheap one for academics - and also using lora. When I use the debugger it seems I have to disable the LoRa transmission, so you\'92ll see in my main.cpp:loop() that I have disabled that. The values are the same, but using LoRa to debug the values was slow.\
+\
+Here\'92s the code that does the voltage reads (also at\'a0{\field{\*\fldinst{HYPERLINK "https://github.com/jgallagher59701/RocketScream-battery/blob/main/src/get_battery_voltage.cpp"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 https://github.com/jgallagher59701/RocketScream-battery/blob/main/src/get_battery_voltage.cpp}}).\
+\
+Thanks for looking at this!\
+\
+James\
+\
+\pard\pardeftab720\sl360\partightenfactor0
+
+\f4\fs24 \cf8 \cb9 \strokec8 #include\cf10 \strokec10  \cf11 \strokec11 "get_battery_voltage.h"\cf12 \strokec12 \
+\cf8 \strokec8 #include\cf10 \strokec10  \cf11 \strokec11 <Arduino.h>\cf12 \strokec12 \
+\cf8 \strokec8 #define\cf10 \strokec10  USE_AREF_2V23 \cf13 \strokec13 1\cf12 \cb1 \strokec12 \
+\cf8 \cb9 \strokec8 #define\cf10 \strokec10  USE_AREF_1V0 \cf13 \strokec13 0\cf12 \cb1 \strokec12 \
+\cf8 \cb9 \strokec8 #define\cf10 \strokec10  V_BAT \cf14 \strokec14 A5\cf12 \strokec12 \
+\cf8 \strokec8 #define\cf10 \strokec10  ADC_BITS \cf13 \strokec13 12\cf12 \cb1 \strokec12 \
+\cf8 \cb9 \strokec8 #define\cf10 \strokec10  ADC_MAX_VALUE \cf13 \strokec13 4096\cf12 \cb1 \strokec12 \
+\cf8 \cb9 \strokec8 #define\cf10 \strokec10  VALUES_TO_AVG \cf13 \strokec13 10\cf12 \cb1 \strokec12 \
+\cf8 \cb9 \strokec8 #define\cf10 \strokec10  VOLTAGE_OFFSET \cf13 \strokec13 0.01\cf12 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf15 \strokec15 /**\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15  * \cf10 \strokec10 @brief\cf15 \strokec15  Read the current voltage of the battery\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15  *\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15  * \cf10 \strokec10 @note\cf15 \strokec15  this version assumes that a voltage divider reduces Vbat by 1/2\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15  * \cf10 \strokec10 @return\cf15 \strokec15  The battery voltage x 100 as an int\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15  */\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf10 \cb9 \strokec10 int\cf12 \strokec12  \cf16 \strokec16 get_battery_voltage\cf12 \strokec12 () \{\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf15 \cb9 \strokec15     // Take one sample, discard it, then 10 samples\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // and return their average. Time delays, etc., can be set in\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // setup() using ADC calls. See:\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // {\field{\*\fldinst{HYPERLINK "https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/}}\cf12 \strokec12 \
+    (\cf10 \strokec10 void\cf12 \strokec12 )\cf16 \strokec16 analogRead\cf12 \strokec12 (\cf10 \strokec10 V_BAT\cf12 \strokec12 );\cf15 \strokec15   // discard the first read\cf12 \strokec12 \
+    \cf10 \strokec10 int\cf12 \strokec12  \cf14 \strokec14 raw\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 0\cf12 \strokec12 ;\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     \cf8 \strokec8 for\cf12 \strokec12  (\cf10 \strokec10 int\cf12 \strokec12  \cf14 \strokec14 i\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 0\cf12 \strokec12 ; \cf14 \strokec14 i\cf12 \strokec12  \cf17 \strokec17 <\cf12 \strokec12  \cf10 \strokec10 VALUES_TO_AVG\cf12 \strokec12 ; \cf17 \strokec17 ++\cf14 \strokec14 i\cf12 \strokec12 ) \{\cb1 \
+\cb9         \cf14 \strokec14 raw\cf12 \strokec12  \cf17 \strokec17 +=\cf12 \strokec12  \cf16 \strokec16 analogRead\cf12 \strokec12 (\cf10 \strokec10 V_BAT\cf12 \strokec12 );\cb1 \
+\cb9     \}\
+    \cf10 \strokec10 float\cf12 \strokec12  \cf14 \strokec14 avg_adc_reading\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  (\cf10 \strokec10 float\cf12 \strokec12 )\cf14 \strokec14 raw\cf12 \strokec12  \cf17 \strokec17 /\cf12 \strokec12  \cf10 \strokec10 VALUES_TO_AVG\cf12 \strokec12 ;\cb1 \
+\cb9     \cf10 \strokec10 float\cf12 \strokec12  \cf14 \strokec14 voltage\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 0.0\cf12 \strokec12 ;\
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \strokec8 #if\cf10 \strokec10  USE_AREF_2V23\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf15 \cb9 \strokec15     // Vref = 2.23, the voltage divider cuts the voltage in half. ADC / ADC_MAX\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // * 2.23 is the actual voltage the ADC measures. Double that to account\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // for the voltage divider. The divider is there to keep the voltage measured\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // below 3.3 (Vbat can be 3.7V).\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     \cf14 \strokec14 voltage\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 4.46\cf12 \strokec12  \cf17 \strokec17 *\cf12 \strokec12  (\cf14 \strokec14 avg_adc_reading\cf12 \strokec12  \cf17 \strokec17 /\cf12 \strokec12  \cf10 \strokec10 ADC_MAX_VALUE\cf12 \strokec12 );\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #elif\cf12 \strokec12  USE_AREF_1V0\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     voltage \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 2.0\cf12 \strokec12  \cf17 \strokec17 *\cf12 \strokec12  (avg_adc_reading \cf17 \strokec17 /\cf12 \strokec12  ADC_MAX_VALUE);\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #else\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     voltage \cf17 \strokec17 =\cf12 \strokec12  \cf13 \strokec13 6.6\cf12 \strokec12  \cf17 \strokec17 *\cf12 \strokec12  (avg_adc_reading \cf17 \strokec17 /\cf12 \strokec12  ADC_MAX_VALUE);\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #endif\cf12 \strokec12 \
+    \cf8 \strokec8 return\cf12 \strokec12  (\cf10 \strokec10 int\cf12 \strokec12 )\cf16 \strokec16 roundf\cf12 \strokec12 ((\cf14 \strokec14 voltage\cf12 \strokec12  \cf17 \strokec17 +\cf12 \strokec12  \cf10 \strokec10 VOLTAGE_OFFSET\cf12 \strokec12 ) \cf17 \strokec17 *\cf12 \strokec12  \cf13 \strokec13 100.0\cf12 \strokec12 );\cf15 \strokec15   // voltage * 100\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9 \}\
+\pard\pardeftab720\sl360\partightenfactor0
+\cf10 \strokec10 void\cf12 \strokec12  \cf16 \strokec16 get_battery_voltage_setup\cf12 \strokec12 () \{\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #if\cf10 \strokec10  USE_AREF_2V23\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     \cf16 \strokec16 analogReference\cf12 \strokec12 (\cf18 \strokec18 AR_INTERNAL2V23\cf12 \strokec12 );\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #elif\cf12 \strokec12  USE_AREF_1V0\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     \cf16 \strokec16 analogReference\cf12 \strokec12 (AR_INTERNAL1V0);\cb1 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf8 \cb9 \strokec8 #endif\cf12 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf15 \strokec15     // See {\field{\*\fldinst{HYPERLINK "https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/}}\cf12 \cb1 \strokec12 \
+\cf15 \cb9 \strokec15     // And assume an input impedance of 500k for the 1M | 1M V divider\cf12 \cb1 \strokec12 \
+\pard\pardeftab720\sl360\partightenfactor0
+\cf12 \cb9     \cf10 \strokec10 ADC\cf12 \strokec12 ->\cf14 \strokec14 SAMPCTRL\cf12 \strokec12 .\cf14 \strokec14 reg\cf12 \strokec12  \cf17 \strokec17 =\cf12 \strokec12  \cf10 \strokec10 ADC_SAMPCTRL_SAMPLEN\cf12 \strokec12 (\cf13 \strokec13 3\cf12 \strokec12 );\
+    \cf16 \strokec16 analogReadResolution\cf12 \strokec12 (\cf10 \strokec10 ADC_BITS\cf12 \strokec12 );\cb1 \
+\cb9 \}\
+\pard\pardeftab720\partightenfactor0
+
+\f2\fs28 \cf7 \cb1 \strokec7 \
+\
+\
+On Nov 12, 2023, at 07:36, Lim Phang Moh {\field{\*\fldinst{HYPERLINK "mailto:support@rocketscream.com"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <support@rocketscream.com>}} wrote:\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf7 Hi James,\
+That is okay. But I presume you connect the USB to get out the battery voltage readings?\
+Can I take a look at your code?\
+\pard\pardeftab720\partightenfactor0
+\cf7 Phang Moh, Lim\
+Rocket Scream Electronics\
+On 11/12/23 02:25, James Gallagher wrote:\
+Lim,\
+\
+At 3.00v I measure 2.97v on the 3V3 pin. At 2.70v I measure 2.67v, so it looks like 0.03v drop (which sounds pretty low, but I don\'92t have much experience with LDO regulators).\
+\
+James\
+\
+\
+On Nov 10, 2023, at 18:09, Lim Phang Moh {\field{\*\fldinst{HYPERLINK "mailto:support@rocketscream.com"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <support@rocketscream.com>}} wrote:\
+\pard\pardeftab720\sa280\partightenfactor0
+\cf7 Hi James,\
+Can you measure the 3V3 pin when you are powering with the low battery voltage? I want to see how much of drop on the LDO after the battery. These USB device need 3.3V for the USB part to work properly. Of course it doesn't matter if the USB portion is not in use in the application itself.\uc0\u8232 \
+\pard\pardeftab720\partightenfactor0
+\cf7 Phang Moh, Lim\
+Rocket Scream Electronics\
+On 11/9/23 23:55, James Gallagher wrote:\
+\
+\
+On Nov 8, 2023, at 23:17, Lim Phang Moh {\field{\*\fldinst{HYPERLINK "mailto:support@rocketscream.com"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 <support@rocketscream.com>}} wrote:\
+Hi James,\
+\
+The voltage divider has an upper resistor of 1M and bottom resistor of 3.3M. At 3.3V battery input and using the 2.23V internal reference, the voltage measured at the bottom resistor is around 2.533V. This is still more than the 2.23V internal reference, so it will report as 2.23V.\
+\
+The voltage divider resistors were selected to fit as much as possible into the entire 0-3.3V range to get a better resolution. You might need to tweak the bottom resistor value to fit the range better.\
+\
+I switched to a 1M + 1M divider. so the 3.3V should appear to be 1.65V. But what I\'92m seeing is that as the battery voltage goes lower, the reading level off.\'a0\
+\
+How much higher than the 2.23V reference level does the RS power need to be?\'a0\
+\
+Thanks,\
+James\
+\
+\
+Phang Moh, Lim\
+Rocket Scream Electronics\
+\
+On 11/9/23 13:35, {\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}} wrote:\
+Name: James Gallagher\
+E-Mail: {\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+Subject: Battery monitoring\
+\
+Message:\
+Hi,\
+\
+I am using V3 of the RocketScream with the LoRa module. I'm using PlatformIO (but I have the Arduino IDE as well) and a I have a JLink probe.\
+\
+I'm having some problems using the simple voltage divider and pin A5 to monitor battery voltage. Will the suggested circuit work when the battery voltage falls below 3.3 volts? I'm seeing the measured voltage leveling off at about 3.3 as the actual voltage falls below 3.3 (using a bench supply).\
+\
+I tried using the 2.23v Vref, but that had the same behavior.\
+\
+Is there something special about pin A5 WRT battery voltage measurement? Will Pin A1 work?\
+\
+Any pointers to information would be helpful.\
+\
+Thanks,\
+James\
+\
+\
+\pard\pardeftab720\partightenfactor0
+
+\fs24 \cf7 \'97\
+James Gallagher\
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\pard\pardeftab720\partightenfactor0
+
+\fs28 \cf7 \
+\
+--\
+James Gallagher\
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\
+\
+--\
+James Gallagher\
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\
+\
+--\
+James Gallagher\
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\
+\
+--\
+James Gallagher\
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\
+\pard\pardeftab720\partightenfactor0
+\cf4 \strokec4 \
+--\
+James Gallagher\
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "mailto:jgallagher@opendap.org"}}{\fldrslt \cf6 \ul \ulc6 \strokec6 jgallagher@opendap.org}}\
+\
+\
+}

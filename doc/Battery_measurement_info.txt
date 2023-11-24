@@ -1,0 +1,265 @@
+From: Lim Phang Moh <support@rocketscream.com>
+Subject: Re: New Message (sent by contact form at Rocket Scream)
+Date: November 23, 2023 at 08:52:56 MST
+To: James Gallagher <jgallagher@opendap.org>
+
+Hi James,
+I think I found the problem. If you look at the core files of the SAMD21 in wiring_analog.c, you'll see:
+
+void analogReference(eAnalogReference mode)
+{
+  syncADC();
+  switch (mode)
+  {
+    case AR_INTERNAL:
+    case AR_INTERNAL2V23:
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;      // Gain Factor Selection
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC0_Val; // 1/1.48 VDDANA = 1/1.48* 3V3 = 2.2297
+      break;
+
+    case AR_EXTERNAL:
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;      // Gain Factor Selection
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_AREFA_Val;
+      break;
+
+    case AR_INTERNAL1V0:
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;      // Gain Factor Selection
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val;   // 1.0V voltage reference
+      break;
+
+    case AR_INTERNAL1V65:
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_1X_Val;      // Gain Factor Selection
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC1_Val; // 1/2 VDDANA = 0.5* 3V3 = 1.65V
+      break;
+
+    case AR_DEFAULT:
+    default:
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC1_Val; // 1/2 VDDANA = 0.5* 3V3 = 1.65V
+      break;
+  }
+}
+
+So, both the AR_INTERNAL1V65 & AR_INTERNAL2V23 are tied to the VDDANA which is your VCC. When 3.0V is the battery input and considering the drop across the LDO is minimal, our AR_INTERNAL1V65 & AR_INTERNAL2V23 are basically around 1.5V and 2.03 respectively. But I weren't able to get this work and it stuck at a ceiling value if VBAT is less than 3.5V. I think there are some code in the Arduino core that is ain't right. 
+So, I look into the 1.0V internal reference instead. Instead of calling the analogReference() function directly, I instead wrote my own and did some modification to the gain:
+
+      while (ADC->STATUS.bit.SYNCBUSY == 1);
+      ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;      // 0.5 gain Factor Selection
+      ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val;   // 1.0V voltage reference
+      while (ADC->STATUS.bit.SYNCBUSY == 1);
+I called the above in the setup() section of the code. Using a half voltage divider resistor network, the computed battery voltage:
+
+
+batteryVoltage = adcReading * ((2 * 2 ) / 1023.0); // The 1st multiplication by 2 is due to the 0.5 gain. The 2nd multiplication by 2 is due to the half voltage divider. Reference is 1.0V
+
+This works down to 2.2V VBAT. Below that it stops operating completely.
+Hope that solve the problem.
+Thank you. 
+Phang Moh, Lim
+Rocket Scream Electronics
+On 11/23/23 08:52, James Gallagher wrote:
+Lim,
+
+I see this didn’t send back on the 15th.
+
+
+On Nov 15, 2023, at 16:59, Lim Phang Moh <support@rocketscream.com> wrote:
+Hi James,
+I will test this out on the hardware this weekend.
+But, I'm just curious how do you get the readings out of the board without the USB connected? When USB is connected, battery will be charged, so it goes up. 
+
+I’m using a j-link debugging probe. The debugger that’s part of platformio works very well. I _was_ using lora to send the data to a matched receiver (a second RS mini ultra pro) but that was tedious to work with since I was swapping the two systems back and forth for various updates.
+
+The debugger is the better option.
+
+Adafruit and others sell a probe that works with the M0, M4, etc., for about $20.
+
+James
+
+Phang Moh, Lim
+Rocket Scream Electronics
+On 11/13/23 03:13, James Gallagher wrote:
+Lim,
+
+One more observation: the 1M|1M voltage divider, when disconnected from pin A5 behaves as expected, reducing the voltage by 1/2 (3.6 —> 1.75, etc.) but when I connect the divider to pin A5, the measured voltage from the divider increases (e.g., 3.6v —> 2.1v). I can see that the Mini Ultra Pro is measuring 4.2v in this case, which is the correct value for 2.1v at pin A5.
+
+However, as the voltage drops below 3.3v, while the voltage at pin A5 drops, the ADC never returns a value lower than ~3600. 
+
+So there seems to be two problems: the voltage divider does not behave as expected and as the battery goes below 3.3v, the reading hits a floor of 3600 and never goes lower.
+
+I must be missing something …
+
+Thanks,
+James
+
+On Nov 12, 2023, at 11:01, James Gallagher <jgallagher@opendap.org> wrote:
+I should add that I’m powering the mini ultra pro using both a bench supply and a standalone battery, running various tests.
+
+James
+
+On Nov 12, 2023, at 10:55, James Gallagher <jgallagher@opendap.org> wrote:
+Lim,
+
+I take it that the LDO also provides the Vref values?
+
+Thanks for looking at this. The code, which I wrote to look into this issue based on a larger body of code, can be found here: https://github.com/jgallagher59701/RocketScream-battery. But, looking through that might be tedious, even though it’s trimmed down to just the batter reading and LoRa parts. I’ll attach/include just the source that initializes the ADC and performs the voltage reads.
+
+I’m getting the values using a j-link debugging probe - the cheap one for academics - and also using lora. When I use the debugger it seems I have to disable the LoRa transmission, so you’ll see in my main.cpp:loop() that I have disabled that. The values are the same, but using LoRa to debug the values was slow.
+
+Here’s the code that does the voltage reads (also at https://github.com/jgallagher59701/RocketScream-battery/blob/main/src/get_battery_voltage.cpp).
+
+Thanks for looking at this!
+
+James
+
+#include "get_battery_voltage.h"
+#include <Arduino.h>
+#define USE_AREF_2V23 1
+#define USE_AREF_1V0 0
+#define V_BAT A5
+#define ADC_BITS 12
+#define ADC_MAX_VALUE 4096
+#define VALUES_TO_AVG 10
+#define VOLTAGE_OFFSET 0.01
+/**
+ * @brief Read the current voltage of the battery
+ *
+ * @note this version assumes that a voltage divider reduces Vbat by 1/2
+ * @return The battery voltage x 100 as an int
+ */
+int get_battery_voltage() {
+    // Take one sample, discard it, then 10 samples
+    // and return their average. Time delays, etc., can be set in
+    // setup() using ADC calls. See:
+    // https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/
+    (void)analogRead(V_BAT);  // discard the first read
+    int raw = 0;
+    for (int i = 0; i < VALUES_TO_AVG; ++i) {
+        raw += analogRead(V_BAT);
+    }
+    float avg_adc_reading = (float)raw / VALUES_TO_AVG;
+    float voltage = 0.0;
+#if USE_AREF_2V23
+    // Vref = 2.23, the voltage divider cuts the voltage in half. ADC / ADC_MAX
+    // * 2.23 is the actual voltage the ADC measures. Double that to account
+    // for the voltage divider. The divider is there to keep the voltage measured
+    // below 3.3 (Vbat can be 3.7V).
+    voltage = 4.46 * (avg_adc_reading / ADC_MAX_VALUE);
+#elif USE_AREF_1V0
+    voltage = 2.0 * (avg_adc_reading / ADC_MAX_VALUE);
+#else
+    voltage = 6.6 * (avg_adc_reading / ADC_MAX_VALUE);
+#endif
+    return (int)roundf((voltage + VOLTAGE_OFFSET) * 100.0);  // voltage * 100
+}
+void get_battery_voltage_setup() {
+#if USE_AREF_2V23
+    analogReference(AR_INTERNAL2V23);
+#elif USE_AREF_1V0
+    analogReference(AR_INTERNAL1V0);
+#endif
+    // See https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/
+    // And assume an input impedance of 500k for the 1M | 1M V divider
+    ADC->SAMPCTRL.reg = ADC_SAMPCTRL_SAMPLEN(3);
+    analogReadResolution(ADC_BITS);
+}
+
+
+
+On Nov 12, 2023, at 07:36, Lim Phang Moh <support@rocketscream.com> wrote:
+Hi James,
+That is okay. But I presume you connect the USB to get out the battery voltage readings?
+Can I take a look at your code?
+Phang Moh, Lim
+Rocket Scream Electronics
+On 11/12/23 02:25, James Gallagher wrote:
+Lim,
+
+At 3.00v I measure 2.97v on the 3V3 pin. At 2.70v I measure 2.67v, so it looks like 0.03v drop (which sounds pretty low, but I don’t have much experience with LDO regulators).
+
+James
+
+
+On Nov 10, 2023, at 18:09, Lim Phang Moh <support@rocketscream.com> wrote:
+Hi James,
+Can you measure the 3V3 pin when you are powering with the low battery voltage? I want to see how much of drop on the LDO after the battery. These USB device need 3.3V for the USB part to work properly. Of course it doesn't matter if the USB portion is not in use in the application itself. 
+Phang Moh, Lim
+Rocket Scream Electronics
+On 11/9/23 23:55, James Gallagher wrote:
+
+
+On Nov 8, 2023, at 23:17, Lim Phang Moh <support@rocketscream.com> wrote:
+Hi James,
+
+The voltage divider has an upper resistor of 1M and bottom resistor of 3.3M. At 3.3V battery input and using the 2.23V internal reference, the voltage measured at the bottom resistor is around 2.533V. This is still more than the 2.23V internal reference, so it will report as 2.23V.
+
+The voltage divider resistors were selected to fit as much as possible into the entire 0-3.3V range to get a better resolution. You might need to tweak the bottom resistor value to fit the range better.
+
+I switched to a 1M + 1M divider. so the 3.3V should appear to be 1.65V. But what I’m seeing is that as the battery voltage goes lower, the reading level off. 
+
+How much higher than the 2.23V reference level does the RS power need to be? 
+
+Thanks,
+James
+
+
+Phang Moh, Lim
+Rocket Scream Electronics
+
+On 11/9/23 13:35, jgallagher@opendap.org wrote:
+Name: James Gallagher
+E-Mail: jgallagher@opendap.org
+Subject: Battery monitoring
+
+Message:
+Hi,
+
+I am using V3 of the RocketScream with the LoRa module. I'm using PlatformIO (but I have the Arduino IDE as well) and a I have a JLink probe.
+
+I'm having some problems using the simple voltage divider and pin A5 to monitor battery voltage. Will the suggested circuit work when the battery voltage falls below 3.3 volts? I'm seeing the measured voltage leveling off at about 3.3 as the actual voltage falls below 3.3 (using a bench supply).
+
+I tried using the 2.23v Vref, but that had the same behavior.
+
+Is there something special about pin A5 WRT battery voltage measurement? Will Pin A1 work?
+
+Any pointers to information would be helpful.
+
+Thanks,
+James
+
+
+—
+James Gallagher
+jgallagher@opendap.org
+
+
+
+--
+James Gallagher
+jgallagher@opendap.org
+
+
+
+--
+James Gallagher
+jgallagher@opendap.org
+
+
+
+--
+James Gallagher
+jgallagher@opendap.org
+
+
+
+--
+James Gallagher
+jgallagher@opendap.org
+
+
+
+--
+James Gallagher
+jgallagher@opendap.org
+
+
