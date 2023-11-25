@@ -13,10 +13,10 @@
 #define USE_AREF_1V0 0
 #define V_BAT A5
 
-#define ADC_BITS 12
-#define ADC_MAX_VALUE 4096
+#define ADC_BITS 10
+#define ADC_MAX_VALUE 1023.0
 #define VALUES_TO_AVG 10
-#define VOLTAGE_OFFSET 0.01
+#define VOLTAGE_OFFSET 0.0
 
 /**
  * @brief Read the current voltage of the battery
@@ -38,33 +38,32 @@ int get_battery_voltage() {
     }
 
     float avg_adc_reading = (float)raw / VALUES_TO_AVG;
-    float voltage = 0.0;
 
-#if USE_AREF_2V23
-    // Vref = 2.23, the voltage divider cuts the voltage in half. ADC / ADC_MAX
-    // * 2.23 is the actual voltage the ADC measures. Double that to account
-    // for the voltage divider. The divider is there to keep the voltage measured
-    // below 3.3 (Vbat can be 3.7V).
-    voltage = 4.46 * (avg_adc_reading / ADC_MAX_VALUE);
-#elif USE_AREF_1V0
-    voltage = 2.0 * (avg_adc_reading / ADC_MAX_VALUE);
-#else
-    voltage = 6.6 * (avg_adc_reading / ADC_MAX_VALUE);
-#endif
+    // The 1st multiplication by 2 is due to the 0.5 gain. The 2nd multiplication 
+    // by 2 is due to the half voltage divider. Reference is 1.0V
+    constexpr int k = 2 * 2;
+    float voltage = avg_adc_reading * (k / 1023.0);
 
     return (int)roundf((voltage + VOLTAGE_OFFSET) * 100.0);  // voltage * 100
 }
 
 void get_battery_voltage_setup() {
-#if USE_AREF_2V23
-    analogReference(AR_INTERNAL2V23);
-#elif USE_AREF_1V0
-    analogReference(AR_INTERNAL1V0);
-#endif
-
     // See https://blog.thea.codes/getting-the-most-out-of-the-samd21-adc/
     // And assume an input impedance of 500k for the 1M | 1M V divider
     ADC->SAMPCTRL.reg = ADC_SAMPCTRL_SAMPLEN(3);
 
-    analogReadResolution(ADC_BITS);
+    // This is from a private communication with Lim Phang Moh or RocketScream.
+    // The idea is that we want to get accurate readings even as the battery voltage
+    // drops way down but, by reading the wiring_analog.c in the Arduino SAMD21
+    // library, he found that both the AR_INTERNAL1V65 and AR_INTERNAL2V23 use
+    // Vcc and that likely explains why the ADC fails to read accurately as the
+    // battery (i.e., Vcc) falls below 3V3. This _should_ work, but some of the 
+    // code int eh Arduino library may not be correct. However, the AR_INTERNAL1V0 
+    // does not appear to be tied to Vcc and using that yields correct values down to 
+    // Vbat == 2V2 at which point the MCU just stops. Set the gain here to be 0.5. 
+    // jhrg 11/25/23
+    while (ADC->STATUS.bit.SYNCBUSY == 1);
+    ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;  // 0.5 gain Factor Selection
+    ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val; // 1.0V voltage reference
+    while (ADC->STATUS.bit.SYNCBUSY == 1);
 }
