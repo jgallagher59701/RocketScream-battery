@@ -40,7 +40,7 @@ void analogReference(eAnalogReference mode)
   }
 }
 
-So, both the AR_INTERNAL1V65 & AR_INTERNAL2V23 are tied to the VDDANA which is your VCC. When 3.0V is the battery input and considering the drop across the LDO is minimal, our AR_INTERNAL1V65 & AR_INTERNAL2V23 are basically around 1.5V and 2.03 respectively. But I weren't able to get this work and it stuck at a ceiling value if VBAT is less than 3.5V. I think there are some code in the Arduino core that is ain't right. 
+So, both the AR_INTERNAL1V65 & AR_INTERNAL2V23 are tied to the VDDANA which is your VCC. When 3.0V is the battery input and considering the drop across the LDO is minimal, our AR_INTERNAL1V65 & AR_INTERNAL2V23 are basically around 1.5V and 2.03 respectively. But I weren't able to get this work and it stuck at a ceiling value if VBAT is less than 3.5V. I think there are some code in the Arduino core that is ain't right.
 So, I look into the 1.0V internal reference instead. Instead of calling the analogReference() function directly, I instead wrote my own and did some modification to the gain:
 
       while (ADC->STATUS.bit.SYNCBUSY == 1);
@@ -54,7 +54,7 @@ batteryVoltage = adcReading * ((2 * 2 ) / 1023.0); // The 1st multiplication by 
 
 This works down to 2.2V VBAT. Below that it stops operating completely.
 Hope that solve the problem.
-Thank you. 
+Thank you.
 Phang Moh, Lim
 Rocket Scream Electronics
 On 11/23/23 08:52, James Gallagher wrote:
@@ -66,7 +66,7 @@ I see this didn’t send back on the 15th.
 On Nov 15, 2023, at 16:59, Lim Phang Moh <support@rocketscream.com> wrote:
 Hi James,
 I will test this out on the hardware this weekend.
-But, I'm just curious how do you get the readings out of the board without the USB connected? When USB is connected, battery will be charged, so it goes up. 
+But, I'm just curious how do you get the readings out of the board without the USB connected? When USB is connected, battery will be charged, so it goes up.
 
 I’m using a j-link debugging probe. The debugger that’s part of platformio works very well. I _was_ using lora to send the data to a matched receiver (a second RS mini ultra pro) but that was tedious to work with since I was swapping the two systems back and forth for various updates.
 
@@ -182,7 +182,7 @@ James
 
 On Nov 10, 2023, at 18:09, Lim Phang Moh <support@rocketscream.com> wrote:
 Hi James,
-Can you measure the 3V3 pin when you are powering with the low battery voltage? I want to see how much of drop on the LDO after the battery. These USB device need 3.3V for the USB part to work properly. Of course it doesn't matter if the USB portion is not in use in the application itself. 
+Can you measure the 3V3 pin when you are powering with the low battery voltage? I want to see how much of drop on the LDO after the battery. These USB device need 3.3V for the USB part to work properly. Of course it doesn't matter if the USB portion is not in use in the application itself.
 Phang Moh, Lim
 Rocket Scream Electronics
 On 11/9/23 23:55, James Gallagher wrote:

@@ -57,11 +57,11 @@ void get_battery_voltage_setup() {
     // drops way down but, by reading the wiring_analog.c in the Arduino SAMD21
     // library, he found that both the AR_INTERNAL1V65 and AR_INTERNAL2V23 use
     // Vcc and that likely explains why the ADC fails to read accurately as the
-    // battery (i.e., Vcc) falls below 3V3. This _should_ work, but some of the 
-    // code int eh Arduino library may not be correct. However, the AR_INTERNAL1V0 
-    // does not appear to be tied to Vcc and using that yields correct values down to 
-    // Vbat == 2V2 at which point the MCU just stops. Set the gain here to be 0.5. 
-    // jhrg 11/25/23
+    // battery (i.e., Vcc) falls below 3V3. This _should_ work, but some of the
+    // code in th Arduino library may not be correct because it clearly does not work.
+    // However, the AR_INTERNAL1V0 does not appear to be tied to Vcc and using that
+    // yields correct values down to Vbat == 2V2 at which point the MCU just stops.
+    // Set the gain here to be 0.5. jhrg 11/25/23
     while (ADC->STATUS.bit.SYNCBUSY == 1);
     ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;  // 0.5 gain Factor Selection
     ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INT1V_Val; // 1.0V voltage reference
